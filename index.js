@@ -43,6 +43,44 @@ app.use(express.json());
 app.use(cookieParser());
 
 
+// const verifyToken = async (req, res, next) => {
+//   const token = req.cookies.token;
+//   if (!token) return res.status(401).send({ message: "Unauthorized" });
+
+//   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, async (err, decoded) => {
+//     if (err) {
+//       if (err.name === "TokenExpiredError") {
+//         return res.status(401).send({ message: "TokenExpired" });
+//       }
+//       return res.status(403).send({ message: "Forbidden" });
+//     }
+
+//     try {
+//       // ✅ GET DB SAFELY HERE
+//       const db = getDB("main");
+//       const usersCollection = db.collection("users");
+
+//       const user = await usersCollection.findOne({ email: decoded.email });
+
+//       if (!user) {
+//         return res.status(401).send({ message: "User not found" });
+//       }
+
+//       req.user = {
+//         uid: user.uid || user._id.toString(),
+//         name: user.name,
+//         email: user.email,
+//         status: user.status,
+//       };
+
+//       next();
+//     } catch (error) {
+//       console.error("verifyToken error:", error);
+//       res.status(500).send({ message: "Auth failed" });
+//     }
+//   });
+// };
+
 const verifyToken = async (req, res, next) => {
   const token = req.cookies.token;
   if (!token) return res.status(401).send({ message: "Unauthorized" });
@@ -56,26 +94,15 @@ const verifyToken = async (req, res, next) => {
     }
 
     try {
-      // ✅ GET DB SAFELY HERE
       const db = getDB("main");
       const usersCollection = db.collection("users");
 
       const user = await usersCollection.findOne({ email: decoded.email });
+      if (!user) return res.status(401).send({ message: "User not found" });
 
-      if (!user) {
-        return res.status(401).send({ message: "User not found" });
-      }
-
-      req.user = {
-        uid: user.uid || user._id.toString(),
-        name: user.name,
-        email: user.email,
-        status: user.status,
-      };
-
+      req.user = user;
       next();
-    } catch (error) {
-      console.error("verifyToken error:", error);
+    } catch (err) {
       res.status(500).send({ message: "Auth failed" });
     }
   });
@@ -888,10 +915,26 @@ function createUserRoutes() {
   });
 
   // 🔐 Create a user (recommended protected, or use public with caution)
-  app.post("/user", verifyToken, async (req, res) => {
-    const result = await usersCollection.insertOne(req.body);
-    res.send(result);
+  // app.post("/user", verifyToken, async (req, res) => {
+  //   const result = await usersCollection.insertOne(req.body);
+  //   res.send(result);
+  // });
+
+
+  app.post("/user", async (req, res) => {
+  const user = req.body;
+
+  const existingUser = await usersCollection.findOne({
+    email: user.email,
   });
+
+  if (existingUser) {
+    return res.send({ message: "User already exists" });
+  }
+
+  const result = await usersCollection.insertOne(user);
+  res.send(result);
+});
 
   // 🔐 Get user by email
   app.get("/user/:email", verifyToken, async (req, res) => {
